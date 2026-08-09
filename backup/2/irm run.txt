@@ -1,0 +1,6 @@
+cmd 
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/galshinew/installer/main/winutil.ps1 | iex"
+
+ps
+
+irm https://raw.githubusercontent.com/galshinew/installer/main/winutil.ps1 | iex

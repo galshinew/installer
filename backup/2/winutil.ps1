@@ -88,7 +88,7 @@ $green  = [System.Drawing.Color]::FromArgb(21,128,61)
 
 # ---- window ----
 $form = New-Object System.Windows.Forms.Form
-$form.Text = 'App Installer'
+$form.Text = 'WinUtil App Installer'
 $form.ClientSize = New-Object System.Drawing.Size(880, 690)
 $form.MinimumSize = New-Object System.Drawing.Size(720, 600)
 $form.StartPosition = 'CenterScreen'
@@ -104,18 +104,18 @@ $header.BackColor = $accent
 $form.Controls.Add($header)
 
 $hTitle = New-Object System.Windows.Forms.Label
-$hTitle.Text = 'App Installer'
-$hTitle.Font = New-Object System.Drawing.Font('Segoe UI', 16, [System.Drawing.FontStyle]::Bold)
+$hTitle.Text = 'WinUtil App Installer'
+$hTitle.Font = New-Object System.Drawing.Font('Segoe UI', 17, [System.Drawing.FontStyle]::Bold)
 $hTitle.ForeColor = [System.Drawing.Color]::White
-$hTitle.Location = New-Object System.Drawing.Point(20, 7)
+$hTitle.Location = New-Object System.Drawing.Point(20, 8)
 $hTitle.AutoSize = $true
 $header.Controls.Add($hTitle)
 
 $hSub = New-Object System.Windows.Forms.Label
-$hSub.Text = 'Install your favorite apps with winget'
+$hSub.Text = 'Windows utility - powered by winget'
 $hSub.Font = New-Object System.Drawing.Font('Segoe UI', 9)
 $hSub.ForeColor = [System.Drawing.Color]::FromArgb(210,225,255)
-$hSub.Location = New-Object System.Drawing.Point(21, 38)
+$hSub.Location = New-Object System.Drawing.Point(21, 36)
 $hSub.AutoSize = $true
 $header.Controls.Add($hSub)
 
@@ -159,78 +159,26 @@ $tabInstall.Controls.Add($searchWm)
 $search.Add_Enter({ $searchWm.Visible = $false })
 $search.Add_Leave({ if ($search.Text -eq '') { $searchWm.Visible = $true } })
 
-$flow = New-Object System.Windows.Forms.FlowLayoutPanel
-$flow.Location = New-Object System.Drawing.Point(12, 44)
-$flow.Size = New-Object System.Drawing.Size(830, 348)
-$flow.AutoScroll = $true
-$flow.WrapContents = $true
-$flow.FlowDirection = 'LeftToRight'
-$flow.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
-$flow.BackColor = $cPanel
-$tabInstall.Controls.Add($flow)
+$script:iconList = New-Object System.Windows.Forms.ImageList
+$script:iconList.ColorDepth = [System.Windows.Forms.ColorDepth]::Depth32Bit
+$script:iconList.ImageSize = New-Object System.Drawing.Size(20, 20)
+$bmp = New-Object System.Drawing.Bitmap(20, 20)
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+$g.Clear($accent)
+$g.Dispose()
+$script:iconList.Images.Add($bmp) | Out-Null
 
-$script:tt = New-Object System.Windows.Forms.ToolTip
-$script:tt.InitialDelay = 400
-
-$script:catLabels = @{}
-$script:catButtons = @{}
-
-function Add-CategoryHeader([string]$cat) {
-    $l = New-Object System.Windows.Forms.Label
-    $l.Text = $cat
-    $l.Font = New-Object System.Drawing.Font('Segoe UI', 11, [System.Drawing.FontStyle]::Bold)
-    $l.ForeColor = $accent
-    $l.AutoSize = $false
-    $l.Size = New-Object System.Drawing.Size(794, 28)
-    $l.Margin = New-Object System.Windows.Forms.Padding(0, 10, 0, 2)
-    $flow.Controls.Add($l)
-    $script:catLabels[$cat] = $l
-    $script:catButtons[$cat] = @()
-}
-
-function Add-AppButton([string]$name, [string]$id, [string]$desc, [string]$cat, [string]$link) {
-    $b = New-Object System.Windows.Forms.Button
-    $b.Text = $name
-    $b.Tag = $id
-    $script:tt.SetToolTip($b, $desc)
-    $b.Size = New-Object System.Drawing.Size(190, 42)
-    $b.Margin = New-Object System.Windows.Forms.Padding(4)
-    $b.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
-    $b.FlatAppearance.BorderColor = $cLine
-    $b.FlatAppearance.BorderSize = 1
-    $b.BackColor = $cPanel
-    $b.ForeColor = $cTxt
-    $b.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $b.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
-    $b.ImageAlign = [System.Drawing.ContentAlignment]::MiddleLeft
-    $b.TextImageRelation = [System.Windows.Forms.TextImageRelation]::ImageBeforeText
-    $b.Padding = New-Object System.Windows.Forms.Padding(4, 0, 0, 0)
-    $b.Add_Click({
-        param($sender, $e)
-        if ($sender.BackColor.Equals($accent)) {
-            $sender.BackColor = $cPanel
-            $sender.ForeColor = $cTxt
-        } else {
-            $sender.BackColor = $accent
-            $sender.ForeColor = [System.Drawing.Color]::White
-        }
-        Update-Count
-    })
-    $flow.Controls.Add($b)
-    $script:catButtons[$cat] += $b
-    $script:idNames[$id] = $name
-    if ($link) {
-        try {
-            $d = ([uri]$link).Host
-            if ($d) {
-                [void]$script:uniqueDomains.Add($d)
-                if (-not $script:domainButtons.ContainsKey($d)) { $script:domainButtons[$d] = @() }
-                $script:domainButtons[$d] += $b
-            }
-        } catch {}
-    }
-    return $b
-}
+$tv = New-Object System.Windows.Forms.TreeView
+$tv.Location = New-Object System.Drawing.Point(12, 44)
+$tv.Size = New-Object System.Drawing.Size(830, 348)
+$tv.CheckBoxes = $true
+$tv.Scrollable = $true
+$tv.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+$tv.BackColor = $cPanel
+$tv.ForeColor = $cTxt
+$tv.Font = New-Object System.Drawing.Font('Segoe UI', 10)
+$tv.ImageList = $script:iconList
+$tabInstall.Controls.Add($tv)
 
 # ---- Update tab ----
 $ulv = New-Object System.Windows.Forms.ListView
@@ -257,9 +205,8 @@ function Resize-Lists {
     $tvH = $dh - 46
     $ulvH = $dh - 12
     $search.Size = New-Object System.Drawing.Size($w, 26)
-    $flow.Size = New-Object System.Drawing.Size($w, $tvH)
+    $tv.Size = New-Object System.Drawing.Size($w, $tvH)
     $ulv.Size = New-Object System.Drawing.Size($w, $ulvH)
-    foreach ($cl in $script:catLabels.Values) { $cl.Width = $w - 30 }
 }
 $tabs.Add_Resize({ Resize-Lists })
 $form.Add_Resize({ Resize-Lists })
@@ -404,16 +351,14 @@ $tabs.SelectedIndex = 0
 
 # ---- data model ----
 $script:idNames = @{}
+$script:domainNodes = @{}
 $script:suppress = $false
-$script:uniqueDomains = New-Object System.Collections.Generic.HashSet[string]
-$script:domainButtons = @{}
-$script:iconCache = @{}
 
 function Get-Selected {
     $ids = @()
-    foreach ($ctl in $flow.Controls) {
-        if ($ctl -is [System.Windows.Forms.Button] -and $ctl.Tag -and $ctl.BackColor.Equals($accent)) {
-            $ids += [string]$ctl.Tag
+    foreach ($cn in $tv.Nodes) {
+        foreach ($an in $cn.Nodes) {
+            if ($an.Checked -and $an.Tag) { $ids += [string]$an.Tag }
         }
     }
     return $ids
@@ -423,20 +368,10 @@ function Update-Count {
     $countLabel.Text = "$(@(Get-Selected).Count) app(s) selected"
 }
 
-function Set-AppOn($b, [bool]$on) {
-    if ($on) {
-        $b.BackColor = $accent
-        $b.ForeColor = [System.Drawing.Color]::White
-    } else {
-        $b.BackColor = $cPanel
-        $b.ForeColor = $cTxt
-    }
-}
-
 function Set-AllChecked([bool]$state) {
-    foreach ($ctl in $flow.Controls) {
-        if ($ctl -is [System.Windows.Forms.Button] -and $ctl.Tag) { Set-AppOn $ctl $state }
-    }
+    $script:suppress = $true
+    foreach ($cn in $tv.Nodes) { foreach ($an in $cn.Nodes) { $an.Checked = $state } }
+    $script:suppress = $false
     Update-Count
 }
 
@@ -463,18 +398,29 @@ function Update-InstalledTab {
 }
 $ulv.Add_ItemChecked({ Update-UpdateCount })
 
+$tv.Add_AfterCheck({
+    param($s, $e)
+    if ($script:suppress) { return }
+    if ($e.Node.Nodes.Count -gt 0) {
+        $script:suppress = $true
+        foreach ($n in $e.Node.Nodes) { $n.Checked = $e.Node.Checked }
+        $script:suppress = $false
+    }
+    Update-Count
+})
+
 $search.Add_TextChanged({
     $q = $search.Text.ToLower()
-    foreach ($cat in $categoryOrder) {
-        if (-not $script:catButtons.ContainsKey($cat)) { continue }
+    foreach ($cn in $tv.Nodes) {
         $vis = 0
-        foreach ($b in $script:catButtons[$cat]) {
-            $tag = if ($b.Tag) { [string]$b.Tag } else { '' }
-            $show = ($q -eq '' -or $b.Text.ToLower().Contains($q) -or $tag.ToLower().Contains($q))
-            $b.Visible = $show
+        foreach ($an in $cn.Nodes) {
+            $tag = if ($an.Tag) { [string]$an.Tag } else { '' }
+            $show = ($q -eq '' -or $an.Text.ToLower().Contains($q) -or $tag.ToLower().Contains($q))
+            $an.Visible = $show
             if ($show) { $vis++ }
         }
-        $script:catLabels[$cat].Visible = ($q -eq '' -or $vis -gt 0)
+        $cn.Visible = ($q -eq '' -or $vis -gt 0)
+        if ($q -ne '') { $cn.Expand() }
     }
 })
 
@@ -524,6 +470,7 @@ $iconScript = {
             $q.Enqueue('@@ICON@@|' + $d + '|' + [Convert]::ToBase64String($bytes))
         } catch {}
     }
+    $q.Enqueue('@@ICONDONE@@')
 }
 
 $script:outQ = New-Object System.Collections.Concurrent.ConcurrentQueue[string]
@@ -592,12 +539,12 @@ $script:timer.Add_Tick({
                 $script:installedSet = $set
                 $script:allInstalled = @($set)
                 $script:installedIds = @()
-                foreach ($ctl in $flow.Controls) {
-                    if ($ctl -is [System.Windows.Forms.Button] -and $ctl.Tag) {
-                        $id = [string]$ctl.Tag
-                        if ($set.Contains($id.ToLower())) {
-                            if (-not $ctl.Text.EndsWith(' ✓')) { $ctl.Text = $ctl.Text + ' ✓' }
-                            $script:installedIds += $id
+                foreach ($cn in $tv.Nodes) {
+                    foreach ($an in $cn.Nodes) {
+                        if ($an.Tag -and $set.Contains(([string]$an.Tag).ToLower())) {
+                            if (-not $an.Text.EndsWith('(installed)')) { $an.Text = $an.Text + '  (installed)' }
+                            $an.ForeColor = $green
+                            $script:installedIds += [string]$an.Tag
                         }
                     }
                 }
@@ -608,19 +555,16 @@ $script:timer.Add_Tick({
             }
             elseif ($line -like '@@ICON@@|*') {
                 $parts = $line.Substring(9).Split('|')
-                if ($parts.Count -ge 2 -and $script:domainButtons.ContainsKey($parts[0])) {
+                if ($parts.Count -ge 2 -and $script:domainNodes.ContainsKey($parts[0])) {
                     try {
                         $ms = [System.IO.MemoryStream]::new([System.Convert]::FromBase64String($parts[1]))
-                        $img = [System.Drawing.Image]::FromStream($ms)
-                        $ico = New-Object System.Drawing.Bitmap(16, 16)
-                        $g = [System.Drawing.Graphics]::FromImage($ico)
-                        $g.InterpolationMode = 'HighQualityBicubic'
-                        $g.DrawImage($img, 0, 0, 16, 16)
-                        $g.Dispose()
-                        $img.Dispose()
+                        $img = [System.Drawing.Bitmap]::new($ms)
+                        $copy = [System.Drawing.Bitmap]::new($img)
                         $ms.Dispose()
-                        $script:iconCache[$parts[0]] = $ico
-                        foreach ($btn in $script:domainButtons[$parts[0]]) { $btn.Image = $ico }
+                        $img.Dispose()
+                        $idx = $script:iconList.Images.Count
+                        $script:iconList.Images.Add($copy) | Out-Null
+                        foreach ($n in $script:domainNodes[$parts[0]]) { $n.ImageIndex = $idx }
                     } catch {}
                 }
             }
@@ -704,10 +648,9 @@ $btnImport.Add_Click({
     }
     $script:suppress = $true
     $matched = 0
-    foreach ($ctl in $flow.Controls) {
-        if ($ctl -is [System.Windows.Forms.Button] -and $ctl.Tag -and $ids -contains ([string]$ctl.Tag)) {
-            Set-AppOn $ctl $true
-            $matched++
+    foreach ($cn in $tv.Nodes) {
+        foreach ($an in $cn.Nodes) {
+            if ($an.Tag -and $ids -contains ([string]$an.Tag)) { $an.Checked = $true; $matched++ }
         }
     }
     $script:suppress = $false
@@ -783,19 +726,40 @@ $form.Add_FormClosing({
     if ($script:iconRS) { try { $script:iconRS.Close() } catch {} }
 })
 
-# ---- build category buttons ----
+# ---- build tree + icon domain map ----
+$script:uniqueDomains = New-Object System.Collections.Generic.HashSet[string]
 foreach ($cat in $categoryOrder) {
     $catApps = @($apps.PSObject.Properties | Where-Object { $_.Value.category -eq $cat } | Sort-Object { $_.Value.content })
     if ($catApps.Count -eq 0) { continue }
-    Add-CategoryHeader $cat
+    $cn = New-Object System.Windows.Forms.TreeNode($cat)
+    $cn.NodeFont = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
     foreach ($app in $catApps) {
-        Add-AppButton -name $app.Value.content -id ([string]$app.Value.winget) -desc $app.Value.description -cat $cat -link ([string]$app.Value.link)
+        $an = New-Object System.Windows.Forms.TreeNode($app.Value.content)
+        $an.Tag = [string]$app.Value.winget
+        $an.ToolTipText = $app.Value.description
+        $an.ImageIndex = 0
+        $cn.Nodes.Add($an) | Out-Null
+        $script:idNames[[string]$app.Value.winget] = $app.Value.content
+        if ($app.Value.link) {
+            try {
+                $d = ([uri]$app.Value.link).Host
+                if ($d) {
+                    [void]$script:uniqueDomains.Add($d)
+                    if (-not $script:domainNodes.ContainsKey($d)) { $script:domainNodes[$d] = @() }
+                    $script:domainNodes[$d] += $an
+                }
+            } catch {}
+        }
     }
+    $tv.Nodes.Add($cn) | Out-Null
 }
+foreach ($cn in $tv.Nodes) { $cn.Collapse() }
 
 $script:catalogSet = New-Object System.Collections.Generic.HashSet[string]
-foreach ($ctl in $flow.Controls) {
-    if ($ctl -is [System.Windows.Forms.Button] -and $ctl.Tag) { [void]$script:catalogSet.Add(([string]$ctl.Tag).ToLower()) }
+foreach ($cn in $tv.Nodes) {
+    foreach ($an in $cn.Nodes) {
+        if ($an.Tag) { [void]$script:catalogSet.Add(([string]$an.Tag).ToLower()) }
+    }
 }
 Update-Count
 
@@ -816,9 +780,9 @@ $form.Add_Shown({
     $script:timer.Start()
 
     if ($script:autoIds -and $script:autoIds.Count -gt 0) {
-        foreach ($ctl in $flow.Controls) {
-            if ($ctl -is [System.Windows.Forms.Button] -and $ctl.Tag -and $ctl.Tag -in $script:autoIds) {
-                Set-AppOn $ctl $true
+        foreach ($cn in $tv.Nodes) {
+            foreach ($an in $cn.Nodes) {
+                if ($an.Tag -in $script:autoIds) { $an.Checked = $true }
             }
         }
         Update-Count
