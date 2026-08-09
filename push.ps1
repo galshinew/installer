@@ -16,4 +16,9 @@ if ($staged) {
 }
 git branch -M main
 git push -u origin main
+if ($LASTEXITCODE -ne 0) {
+    Write-Host 'Push rejected (remote has different history) - forcing push so local files win...'
+    git push -u origin main --force
+    if ($LASTEXITCODE -ne 0) { throw 'Push failed. Check your GitHub credentials.' }
+}
 Write-Host 'Done. Files are live at https://raw.githubusercontent.com/galshinew/installer/main/'
