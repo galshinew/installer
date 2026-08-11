@@ -1,4 +1,4 @@
-﻿param([string]$AppFile)
+param([string]$AppFile)
 
 $ErrorActionPreference = 'Stop'
 
