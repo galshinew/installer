@@ -1,1 +1,0 @@
-powershell -ExecutionPolicy Bypass -File "backup\1\winutil.ps1"
