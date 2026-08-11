@@ -274,7 +274,7 @@ $hSub.AutoSize = $true
 $header.Controls.Add($hSub)
 
 $hVer = New-Object System.Windows.Forms.Label
-$hVer.Text = 'v1.5'
+$hVer.Text = 'v1.6'
 $hVer.Font = New-Object System.Drawing.Font($script:uiFont, 9, [System.Drawing.FontStyle]::Bold)
 $hVer.ForeColor = [System.Drawing.Color]::FromArgb(210,225,255)
 $hVer.TextAlign = 'MiddleRight'
@@ -341,14 +341,18 @@ $chipFlow.FlowDirection = 'LeftToRight'
 $chipFlow.BackColor = $cBg
 $tabInstall.Controls.Add($chipFlow)
 
-$notInstalledOnly = New-Object System.Windows.Forms.CheckBox
-$notInstalledOnly.Text = 'Show only not installed'
-$notInstalledOnly.Font = New-Object System.Drawing.Font($script:uiFont, 9.5)
-$notInstalledOnly.ForeColor = $cTxt
-$notInstalledOnly.AutoSize = $true
-$notInstalledOnly.Anchor = 'Top,Right'
-$notInstalledOnly.Location = New-Object System.Drawing.Point(640, 13)
-$tabInstall.Controls.Add($notInstalledOnly)
+$filterCombo = New-Object System.Windows.Forms.ComboBox
+$filterCombo.DropDownStyle = 'DropDownList'
+$filterCombo.Items.AddRange(@('All', 'Show only not installed', 'Show only installed'))
+$filterCombo.SelectedIndex = 0
+$filterCombo.Font = New-Object System.Drawing.Font($script:uiFont, 9.5)
+$filterCombo.ForeColor = $cTxt
+$filterCombo.BackColor = $cPanel
+$filterCombo.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$filterCombo.Anchor = 'Top,Right'
+$filterCombo.Location = New-Object System.Drawing.Point(660, 10)
+$filterCombo.Size = New-Object System.Drawing.Size(190, 26)
+$tabInstall.Controls.Add($filterCombo)
 
 $script:chips = @()
 function Add-Chip([string]$label) {
@@ -815,7 +819,7 @@ function Resize-Lists {
     $w = $dw - 24
     $search.Size = New-Object System.Drawing.Size(($w - 200), 26)
     $tsearch.Size = New-Object System.Drawing.Size($w, 26)
-    $notInstalledOnly.Location = New-Object System.Drawing.Point(($dw - 200), 13)
+    $filterCombo.Location = New-Object System.Drawing.Point(($dw - 200), 13)
     $chipFlow.Size = New-Object System.Drawing.Size($w, 62)
     $flow.Location = New-Object System.Drawing.Point(12, 110)
     $flow.Size = New-Object System.Drawing.Size($w, ($dh - 124))
@@ -1702,7 +1706,9 @@ $ulv.Add_ItemChecked({ Update-UpdateCount; Set-UpdateEnabled })
 function Apply-AppFilters {
     $q = $search.Text.ToLower()
     $catSel = [string]$script:chipSel
-    $onlyNot = $notInstalledOnly.Checked -and ($script:installedSet -ne $null)
+    $filterMode = $filterCombo.SelectedItem
+    $onlyNot = ($filterMode -eq 'Show only not installed') -and $script:installedSet
+    $onlyInstalled = ($filterMode -eq 'Show only installed') -and $script:installedSet
     $favSel = ($catSel -eq 'Favorites')
     foreach ($cat in $categoryOrder) {
         if (-not $script:catButtons.ContainsKey($cat)) { continue }
@@ -1710,9 +1716,11 @@ function Apply-AppFilters {
         foreach ($b in $script:catButtons[$cat]) {
             $tag = if ($b.Tag) { [string]$b.Tag } else { '' }
             $isFav = $script:favorites.Contains($tag.ToLower())
+            $isInstalled = $script:installedSet -and $script:installedSet.Contains($tag.ToLower())
             $show = ($q -eq '' -or $b.Text.ToLower().Contains($q) -or $tag.ToLower().Contains($q)) -and
                     (($favSel -and $isFav) -or ($catSel -eq 'All') -or ($catSel -eq $cat)) -and
-                    (-not $onlyNot -or -not $script:installedSet.Contains($tag.ToLower()))
+                    (-not $onlyNot -or -not $isInstalled) -and
+                    (-not $onlyInstalled -or $isInstalled)
             $b.Visible = $show
             if ($show) { $vis++ }
         }
@@ -1720,7 +1728,7 @@ function Apply-AppFilters {
     }
 }
 $search.Add_TextChanged({ Apply-AppFilters })
-$notInstalledOnly.Add_CheckedChanged({ Apply-AppFilters })
+$filterCombo.Add_SelectedIndexChanged({ Apply-AppFilters })
 
 # ---- background scripts ----
 $installScript = {
@@ -2224,10 +2232,24 @@ $btnTweakRevert.Add_Click({
 
 function Stop-LocalServer {
     try {
+        # Kill by process command line
         $procs = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'server\.ps1' -and $_.ProcessId -ne $PID }
         foreach ($p in $procs) {
             try { Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop } catch {}
         }
+        # Also kill anything listening on port 8765 (check all PIDs from netstat)
+        $netstat = netstat -ano | Select-String ':8765'
+        if ($netstat) {
+            foreach ($line in $netstat) {
+                $parts = $line -split '\s+'
+                $pid = $parts[-1]
+                if ($pid -and $pid -ne '0' -and $pid -ne $PID) {
+                    try { Stop-Process -Id $pid -Force -ErrorAction Stop } catch {}
+                }
+            }
+        }
+        # Also try HTTP Server API cleanup
+        try { netsh http delete urlacl url=http://localhost:8765/ } catch {}
     } catch {}
 }
 
