@@ -2326,3 +2326,4 @@ Stop-LocalServer
 if ($script:selfPath -and (Split-Path -Path $script:selfPath) -eq $env:TEMP) {
     Remove-Item -LiteralPath $script:selfPath -ErrorAction SilentlyContinue
 }
+
