@@ -274,7 +274,7 @@ $hSub.AutoSize = $true
 $header.Controls.Add($hSub)
 
 $hVer = New-Object System.Windows.Forms.Label
-$hVer.Text = 'v1.6'
+$hVer.Text = 'v2.0'
 $hVer.Font = New-Object System.Drawing.Font($script:uiFont, 9, [System.Drawing.FontStyle]::Bold)
 $hVer.ForeColor = [System.Drawing.Color]::FromArgb(210,225,255)
 $hVer.TextAlign = 'MiddleRight'
@@ -438,6 +438,7 @@ $script:tt.InitialDelay = 400
 $script:appMenu = New-Object System.Windows.Forms.ContextMenuStrip
 $miDetails = $script:appMenu.Items.Add('Details')
 $miInstallNow = $script:appMenu.Items.Add('Install now')
+$miUninstall = $script:appMenu.Items.Add('Uninstall')
 $miHomepage = $script:appMenu.Items.Add('View homepage')
 $miCopyId = $script:appMenu.Items.Add('Copy winget ID')
 $miFav = $script:appMenu.Items.Add('Mark as favorite')
@@ -449,8 +450,11 @@ $script:appMenu.Add_Opening({
     foreach ($p in $apps.PSObject.Properties) {
         if ([string]$p.Value.winget -eq $id) { $link = [string]$p.Value.link; break }
     }
-    $script:appMenu.Items[2].Enabled = ($link -ne '')
-    $script:appMenu.Items[4].Text = if ($script:favorites.Contains($id.ToLower())) { 'Remove from favorites' } else { 'Mark as favorite' }
+    $installed = ($script:installedSet -and $script:installedSet.Contains($id.ToLower()))
+    $miInstallNow.Enabled = (-not $installed)
+    $miUninstall.Enabled = $installed
+    $miHomepage.Enabled = ($link -ne '')
+    $miFav.Text = if ($script:favorites.Contains($id.ToLower())) { 'Remove from favorites' } else { 'Mark as favorite' }
 })
 $miDetails.Add_Click({
     $b = $script:appMenu.SourceControl
@@ -459,6 +463,12 @@ $miDetails.Add_Click({
 $miInstallNow.Add_Click({
     $b = $script:appMenu.SourceControl
     if ($b -and $b.Tag) { Start-InstallOne ([string]$b.Tag) }
+})
+$miUninstall.Add_Click({
+    $b = $script:appMenu.SourceControl
+    if (-not $b -or -not $b.Tag) { return }
+    $script:leftoverMode = $false
+    Confirm-StartUninstall @([string]$b.Tag)
 })
 $miHomepage.Add_Click({
     $b = $script:appMenu.SourceControl
@@ -1234,7 +1244,7 @@ $btnLogRefresh.Add_Click({
 })
 $btnLogClear.Add_Click({
     if (-not (Test-Path -LiteralPath $script:historyFile)) { Refresh-LogTab; return }
-    $r = [System.Windows.Forms.MessageBox]::Show('Clear the history log? This cannot be undone.', 'WinUtil', 'YesNo', 'Question', 'Warning')
+    $r = [System.Windows.Forms.MessageBox]::Show('Clear the history log? This cannot be undone.', 'WinUtil', 'YesNo', 'Warning')
     if ($r -ne 'Yes') { return }
     try { Remove-Item -LiteralPath $script:historyFile -Force -ErrorAction Stop } catch {}
     Refresh-LogTab
@@ -2169,7 +2179,7 @@ function Confirm-StartUninstall([string[]]$ids) {
         $msg += "`n`nProgram leftovers will also be removed - this deletes the AppData and ProgramData folders of these apps."
         $icon = 'Warning'
     }
-    $r = [System.Windows.Forms.MessageBox]::Show($msg, 'WinUtil', 'YesNo', 'Question', $icon)
+    $r = [System.Windows.Forms.MessageBox]::Show($msg, 'WinUtil', 'YesNo', $icon)
     if ($r -ne 'Yes') { return }
     if (Test-Admin) {
         Start-Install $ids 'uninstall'
