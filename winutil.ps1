@@ -1577,7 +1577,7 @@ function Resolve-DnsItem([string[]]$items) {
             $out = @($out | ForEach-Object { if ($_ -eq 'DNS - Set to:') { "DNS - Set to:=$($addr.Trim())" } else { $_ } })
         }
     }
-    return ,$out
+    return $out
 }
 
 function Invoke-ApplyTweaks([string[]]$items) {
