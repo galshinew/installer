@@ -633,7 +633,7 @@
         "Path": "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\TimeZoneInformation",
         "Name": "RealTimeIsUniversal",
         "Value": "1",
-        "Type": "QWord",
+        "Type": "DWord",
         "OriginalValue": "0"
       }
     ],
@@ -646,30 +646,40 @@
     "panel": "1",
     "InvokeScript": [
       "
-      # Deny permission to remove OneDrive folder
-      icacls $Env:OneDrive /deny \"Administrators:(D,DC)\"
+      if ($Env:OneDrive -and (Test-Path -LiteralPath $Env:OneDrive)) {
+          # Deny permission to remove OneDrive folder
+          icacls $Env:OneDrive /deny \"Administrators:(D,DC)\"
+      }
 
       Write-Host \"Uninstalling OneDrive...\"
-      Start-Process -FilePath (Join-Path $Env:SystemRoot \"System32\\OneDriveSetup.exe\") -ArgumentList '/uninstall' -Wait
+      $odSetup = Join-Path $Env:SystemRoot \"System32\\OneDriveSetup.exe\"
+      if (Test-Path -LiteralPath $odSetup) {
+          Start-Process -FilePath $odSetup -ArgumentList '/uninstall' -Wait
+      }
 
       # Some of OneDrive files use explorer, and OneDrive uses FileCoAuth
       Write-Host \"Removing leftover OneDrive Files...\"
 
-      Stop-Process -Name FileCoAuth,Explorer
+      Stop-Process -Name FileCoAuth -Force -ErrorAction SilentlyContinue
 
-      Remove-Item \"$Env:LocalAppData\\Microsoft\\OneDrive\" -Recurse -Force
-      Remove-Item \"$Env:ProgramData\\Microsoft OneDrive\" -Recurse -Force
+      Remove-Item \"$Env:LocalAppData\\Microsoft\\OneDrive\" -Recurse -Force -ErrorAction SilentlyContinue
+      Remove-Item \"$Env:ProgramData\\Microsoft OneDrive\" -Recurse -Force -ErrorAction SilentlyContinue
 
-      # Grant back permission to access OneDrive folder
-      icacls $Env:OneDrive /grant \"Administrators:(D,DC)\"
+      if ($Env:OneDrive -and (Test-Path -LiteralPath $Env:OneDrive)) {
+          # Grant back permission to access OneDrive folder
+          icacls $Env:OneDrive /grant \"Administrators:(D,DC)\"
 
-      if (-not (Get-ChildItem -Path $Env:OneDrive)) {
-          Remove-Item -Path $Env:OneDrive -Recurse
-          [Environment]::SetEnvironmentVariable('OneDrive', $null, 'User')
+          if (-not (Get-ChildItem -Path $Env:OneDrive -ErrorAction SilentlyContinue)) {
+              Remove-Item -Path $Env:OneDrive -Recurse -Force -ErrorAction SilentlyContinue
+              [Environment]::SetEnvironmentVariable('OneDrive', $null, 'User')
+          }
       }
 
       # Disable OneSyncSvc
-      Set-Service -Name OneSyncSvc -StartupType Disabled
+      Set-Service -Name OneSyncSvc -StartupType Disabled -ErrorAction SilentlyContinue
+
+      # Restore Explorer without a reboot
+      Invoke-WinUtilExplorerUpdate -action \"restart\"
       "
     ],
     "UndoScript": [
@@ -1309,18 +1319,12 @@
     ],
     "InvokeScript": [
       "
-      Invoke-WinUtilExplorerUpdate
-      if ($sync.ThemeButton.Content -eq [char]0xF08C) {
-        Invoke-WinutilThemeChange -theme \"Auto\"
-      }
+      Invoke-WinUtilExplorerUpdate -action \"restart\"
       "
     ],
     "UndoScript": [
       "
-      Invoke-WinUtilExplorerUpdate
-      if ($sync.ThemeButton.Content -eq [char]0xF08C) {
-        Invoke-WinutilThemeChange -theme \"Auto\"
-      }
+      Invoke-WinUtilExplorerUpdate -action \"restart\"
       "
     ],
     "link": "https://winutil.christitus.com/code-reference/tweaks/customize-preferences/darkmode"

@@ -274,7 +274,7 @@ $hSub.AutoSize = $true
 $header.Controls.Add($hSub)
 
 $hVer = New-Object System.Windows.Forms.Label
-$hVer.Text = 'v2.0'
+$hVer.Text = 'v2.1'
 $hVer.Font = New-Object System.Drawing.Font($script:uiFont, 9, [System.Drawing.FontStyle]::Bold)
 $hVer.ForeColor = [System.Drawing.Color]::FromArgb(210,225,255)
 $hVer.TextAlign = 'MiddleRight'
@@ -1331,58 +1331,77 @@ function Set-UpdateEnabled {
 
 # ---- tweak engine ----
 function Invoke-TweakScript([string[]]$lines) {
-    foreach ($ln in $lines) {
-        foreach ($l in ($ln -split "`r?`n")) {
-            $s = $l.Trim()
-            if ($s) { try { Invoke-Expression $s } catch {} }
-        }
-    }
+    # Join all lines into one script block so multi-line statements (if/foreach, etc.)
+    # execute as a single unit instead of line-by-line via Invoke-Expression.
+    $body = ($lines -join "`r`n")
+    if (-not $body.Trim()) { return }
+    $scriptBlock = [scriptblock]::Create($body)
+    & $scriptBlock
 }
 
 function Invoke-WinUtilExplorerUpdate { param([string]$action) if ($action -eq 'restart') { Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue } }
 
 function Set-RegEntry($e) {
     try {
-        if (-not $e.p -or -not $e.n -or -not $e.v) { return }
-        if (-not (Test-Path -LiteralPath $e.p)) { New-Item -Path $e.p -Force | Out-Null }
+        if (-not $e.p -or -not $e.n -or -not $e.v) { return $false }
+        if (-not (Test-Path -LiteralPath $e.p)) { New-Item -Path $e.p -Force -ErrorAction Stop | Out-Null }
         New-ItemProperty -Path $e.p -Name $e.n -Value ([string]$e.v) -PropertyType ([string]$e.t) -Force -ErrorAction Stop | Out-Null
-    } catch {}
+        return $true
+    } catch { return "REG $($e.p) :: $($e.n) : $($_.Exception.Message)" }
 }
 
 function Remove-RegEntry($e) {
     try {
         if ($e.o -and $e.o -ne '<RemoveEntry>') {
-            Set-RegEntry @{p=$e.p; n=$e.n; v=$e.o; t=$e.t}
+            Set-RegEntry @{p=$e.p; n=$e.n; v=$e.o; t=$e.t} | Out-Null
         } else {
-            Remove-ItemProperty -Path $e.p -Name $e.n -ErrorAction SilentlyContinue
+            Remove-ItemProperty -Path $e.p -Name $e.n -ErrorAction Stop
         }
-    } catch {}
+        return $true
+    } catch { return "REG $($e.p) :: $($e.n) : $($_.Exception.Message)" }
 }
 
 function Set-SvcStartup([string]$name, [string]$type) {
-    if ($type -eq 'Disable') { $type = 'Disabled' }
-    try { Set-Service -Name $name -StartupType $type -ErrorAction Stop } catch {}
+    try {
+        if ($type -eq 'Disable') { $type = 'Disabled' }
+        Set-Service -Name $name -StartupType $type -ErrorAction Stop
+        return $true
+    } catch { return "SVC ${name} : $($_.Exception.Message)" }
 }
 
 function Invoke-Tweak($t) {
-    if ($t.reg) { foreach ($e in $t.reg) { if ($e.n -and $e.v) { Set-RegEntry $e } } }
-    if ($t.svc) { foreach ($e in $t.svc) { if ($e.n) { Set-SvcStartup $e.n $e.s } } }
-    if ($t.run) { Invoke-TweakScript $t.run }
+    $errors = @()
+    if ($t.reg) { foreach ($e in $t.reg) { if ($e.n -and $e.v) { $r = Set-RegEntry $e; if ($r -ne $true) { $errors += $r } } } }
+    if ($t.svc) { foreach ($e in $t.svc) { if ($e.n) { $r = Set-SvcStartup $e.n $e.s; if ($r -ne $true) { $errors += $r } } } }
+    if ($t.run) {
+        try { Invoke-TweakScript $t.run } catch { $errors += "SCRIPT: $($_.Exception.Message)" }
+    }
+    return $errors
 }
 
 function Undo-Tweak($t) {
-    if ($t.reg) { foreach ($e in $t.reg) { if ($e.n) { Remove-RegEntry $e } } }
-    if ($t.svc) { foreach ($e in $t.svc) { if ($e.n) { Set-SvcStartup $e.n $e.o } } }
-    if ($t.undo) { Invoke-TweakScript $t.undo }
+    $errors = @()
+    if ($t.reg) { foreach ($e in $t.reg) { if ($e.n) { $r = Remove-RegEntry $e; if ($r -ne $true) { $errors += $r } } } }
+    if ($t.svc) { foreach ($e in $t.svc) { if ($e.n) { $r = Set-SvcStartup $e.n $e.o; if ($r -ne $true) { $errors += $r } } } }
+    if ($t.undo) {
+        try { Invoke-TweakScript $t.undo } catch { $errors += "SCRIPT: $($_.Exception.Message)" }
+    }
+    return $errors
 }
 
 function Test-TweakApplied($t) {
     if (-not $t) { return $false }
+    # Special tweaks (MPO, DNS, O&O, Ultimate Performance, etc.) cannot be
+    # reliably verified from this catalog, so never claim they're applied.
+    if ($t.type -eq 'Combobox' -or $t.type -eq 'Button') { return $false }
+    $config = $false
     if ($t.reg) {
         $any = $false
         foreach ($e in $t.reg) {
-            if (-not $e.n -or -not $e.p -or -not $e.v) { continue }
+            if (-not $e.n -or -not $e.p) { continue }
+            if (-not $e.v -or $e.v -eq '<RemoveEntry>') { continue }
             $any = $true
+            $config = $true
             try {
                 $cur = Get-ItemPropertyValue -Path $e.p -Name $e.n -ErrorAction Stop
                 if ([string]$cur -ne [string]$e.v) { return $false }
@@ -1395,19 +1414,21 @@ function Test-TweakApplied($t) {
         foreach ($e in $t.svc) {
             if (-not $e.n -or -not $e.s) { continue }
             $any = $true
+            $config = $true
             $svc = Get-Service -Name $e.n -ErrorAction SilentlyContinue
             $want = $e.s; if ($want -eq 'Disable') { $want = 'Disabled' }
             if (-not $svc -or $svc.StartType.ToString() -ne $want) { return $false }
         }
         if ($any) { return $true }
     }
+    # Script-only tweaks (run present, no verifiable reg/svc) are treated as applied
+    # only if we verified at least one config value; otherwise unknown.
     return $false
 }
 
 function Refresh-TweakStates {
     foreach ($b in $tflow.Controls) {
         if ($b -is [System.Windows.Forms.Button] -and $b.Tag) {
-            if ($b.BackColor.Equals($accent)) { continue }
             Set-TweakButtonOff $b
         }
     }
@@ -1462,24 +1483,31 @@ $script:tweakSpecial = @{
 }
 
 function Apply-Tweaks([string[]]$items) {
+    $done = 0; $failed = 0; $msg = New-Object System.Collections.Generic.List[string]
     foreach ($item in $items) {
-        $name = $item; $apply = $true; $extra = $null
-        if ($item -match '^(.*)=(.*)$') { $name = $Matches[1]; $extra = $Matches[2]; $apply = ($extra -ne '0') }
+        $name = [string]$item; $apply = $true; $extra = $null
+        # item format: "Name" (apply) or "Name=0" (revert, from the Revert button).
+        if ($name -match '^(.*?)=(.*)$') { $name = $Matches[1]; $extra = $Matches[2]; $apply = ($extra -ne '0') }
+        if ($name -eq 'DNS - Set to:' -and -not $apply -and -not $extra) { $apply = $true }
         $t = $script:tweaks[$name]
-        if (-not $t) { continue }
+        if (-not $t) { $failed++; $msg.Add("Unknown tweak: $name"); continue }
         $sp = $script:tweakSpecial[$name]
         if ($sp) {
             try {
                 if ($apply) { & $sp.apply $extra } else { & $sp.revert $extra }
-                Write-History ("tweak {0}: {1}" -f $(if ($apply) { 'applied' } else { 'reverted' }), $name)
-            } catch {}
+                $done++; Write-History ("tweak {0}: {1}" -f $(if ($apply) { 'applied' } else { 'reverted' }), $name)
+            } catch { $failed++; $msg.Add("$name : $($_.Exception.Message)") }
             continue
         }
-        try {
-            if ($apply) { Invoke-Tweak $t } else { Undo-Tweak $t }
-            Write-History ("tweak {0}: {1}" -f $(if ($apply) { 'applied' } else { 'reverted' }), $name)
-        } catch {}
+        $errs = if ($apply) { @(Invoke-Tweak $t) } else { @(Undo-Tweak $t) }
+        if ($errs.Count -eq 0) {
+            $done++; Write-History ("tweak {0}: {1}" -f $(if ($apply) { 'applied' } else { 'reverted' }), $name)
+        } else {
+            $failed++; $msg.Add("$name :`n    " + (($errs | Select-Object -Unique) -join "`n    "))
+            Write-History ("tweak FAILED {0}: {1}" -f $(if ($apply) { 'apply' } else { 'revert' }), $name)
+        }
     }
+    return @{ applied = $done; failed = $failed; details = $msg }
 }
 
 function Get-SelectedTweaks {
@@ -1582,9 +1610,12 @@ function Resolve-DnsItem([string[]]$items) {
 
 function Invoke-ApplyTweaks([string[]]$items) {
     if (Test-Admin) {
-        Apply-Tweaks $items
+        $result = Apply-Tweaks $items
         Refresh-TweakStates
-        [System.Windows.Forms.MessageBox]::Show("Applied $($items.Count) tweak(s).", 'WinUtil') | Out-Null
+        $counts = @($items | Where-Object { $_ -notmatch '=0' }).Count
+        $body = "Done: $($result.applied) /  $($counts) tweak(s)."
+        if ($result.failed -gt 0) { $body += "`n`nFailed ($($result.failed)):`n" + (($result.details) -join "`n") }
+        [System.Windows.Forms.MessageBox]::Show($body, 'WinUtil', 'OK', $(if ($result.failed -gt 0) { 'Warning' } else { 'Information' })) | Out-Null
     } else {
         if (Relaunch-Elevated $items 'tweak') { $form.Close() }
         else { [System.Windows.Forms.MessageBox]::Show('Elevation cancelled.', 'WinUtil') | Out-Null }
